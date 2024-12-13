@@ -1751,6 +1751,9 @@ INSERT INTO PESOS_PREMIER VALUES(32122558062,107000,'02/02/2020');
 COMMIT;
 
 
+
+
+
 ---------------------------------------------------------
 -- Jaime Barraza - EFT Consulta Base de Datos 2024
 ---------------------------------------------------------
@@ -1766,83 +1769,96 @@ FROM
     cliente c
 INNER JOIN 
     region r ON c.cod_region = r.cod_region
-WHERE c.cod_region BETWEEN 1 AND 16
+HAVING 
+    COUNT(CASE WHEN ADD_MONTHS(SYSDATE, -240) >= c.fecha_inscripcion THEN 1 END) > 0
 GROUP BY 
     r.nombre_region
 ORDER BY 
     CLIENTES_20_ANOS ASC;
 
     
---------------------------------------------------
 
 
 -- Crear los índices para optimizar el acceso a los datos
 -- Crear índice IDX_REGION para mejorar acceso por región
 CREATE INDEX IDX_REGION ON cliente(cod_region);
 -- Crear índice IDX_CLI_REGION para mejorar el acceso cruzado entre cliente y región
-CREATE INDEX IDX_CLI_REGION ON cliente(fecha_inscripcion, cod_region);
+CREATE INDEX IDX_CLI_REGION ON cliente(cod_region, numrun);
 
 
 SELECT * FROM Resumen_Clientes_Region;
 
+
 -- Para Visualizar el plan de ejecucion, aunque se ve mejor apretando F10 en la sentencia
---EXPLAIN PLAN FOR SELECT * FROM Resumen_Clientes_Region;
---SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+EXPLAIN PLAN FOR SELECT * FROM Resumen_Clientes_Region;
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 
 
----------------------------------------------------
-
-
--- Informe 2: Transacciones con vencimientos en el segundo semestre
+----------------------------------------------------------------------
+-- Informe 2: Transacciones con vencimientos en el segundo semestre --
+----------------------------------------------------------------------
 
 -- Alternativa 1: Usando OPERADOR SET
 CREATE OR REPLACE VIEW Transacciones_Segundo_Semestre AS
 SELECT 
-    TO_CHAR(ADD_MONTHS(ttc.fecha_transaccion, ttc.total_cuotas_transaccion), 'DD-MM-YYYY') AS FECHA,
+    TO_CHAR(SYSDATE, 'DD-MM-YYYY') AS FECHA, -- fecha emision informe
     ttc.cod_tptran_tarjeta AS CODIGO,
     UPPER(ttt.nombre_tptran_tarjeta) AS DESCRIPCION,
-    TRUNC(AVG(ttc.monto_transaccion), 0) AS MONTO_PROMEDIO_TRANSACCION
+    --TRUNC(AVG(cttc.valor_cuota), 0) AS MONTO_PROMEDIO_TRANSACCION -- asumiento el promedio del valor de las cuotas
+    TRUNC(AVG(ttc.monto_transaccion), 0) AS MONTO_PROMEDIO_TRANSACCION -- asumiento el promedio del monto total por compra
+    --TRUNC(AVG(ttc.monto_total_transaccion), 0) AS MONTO_PROMEDIO_TRANSACCION --asumiento el promedio del monto total (+interes) por compra
 FROM 
     transaccion_tarjeta_cliente ttc
-JOIN 
-    tipo_transaccion_tarjeta ttt ON ttc.cod_tptran_tarjeta = ttt.cod_tptran_tarjeta
+INNER JOIN 
+    tipo_transaccion_tarjeta ttt 
+    ON ttc.cod_tptran_tarjeta = ttt.cod_tptran_tarjeta
+INNER JOIN
+    cuota_transac_tarjeta_cliente cttc 
+    ON ttc.nro_tarjeta = cttc.nro_tarjeta AND ttc.nro_transaccion = cttc.nro_transaccion
 WHERE 
-    EXTRACT(MONTH FROM ADD_MONTHS(ttc.fecha_transaccion, ttc.total_cuotas_transaccion)) BETWEEN 6 AND 12
+    EXTRACT(MONTH FROM cttc.fecha_venc_cuota) BETWEEN 6 AND 12
 GROUP BY 
-    ttc.cod_tptran_tarjeta, ttt.nombre_tptran_tarjeta, ttc.fecha_transaccion, ttc.total_cuotas_transaccion
+    ttc.cod_tptran_tarjeta, ttt.nombre_tptran_tarjeta
 ORDER BY 
     MONTO_PROMEDIO_TRANSACCION ASC;
 
 -----
 SELECT * FROM Transacciones_Segundo_Semestre;
 
+---------------------------
 
 
 -- Alternativa 2: Usando SUBCONSULTA y almacenando resultados en SELECCIÓN_TIPO_TRANSACCIÓN
 INSERT INTO seleccion_tipo_transaccion (fecha, cod_tipo_transac, nombre_tipo_transac, monto_promedio)
 WITH TransaccionesFiltradas AS (
     SELECT 
-        TO_CHAR(ADD_MONTHS(ttc.fecha_transaccion, ttc.total_cuotas_transaccion), 'DD-MM-YYYY') AS FECHA,
-        ttc.cod_tptran_tarjeta AS COD_TIPO_TRANSAC,
-        UPPER(ttt.nombre_tptran_tarjeta) AS NOMBRE_TIPO_TRANSAC,
-        ttc.monto_transaccion AS MONTO
+        TO_CHAR(SYSDATE, 'DD-MM-YYYY') AS FECHA, -- fecha emision informe
+        ttc.cod_tptran_tarjeta AS CODIGO,
+        UPPER(ttt.nombre_tptran_tarjeta) AS DESCRIPCION,
+        --TRUNC(AVG(cttc.valor_cuota), 0) AS MONTO -- asumiento el promedio del valor de las cuotas
+        TRUNC(AVG(ttc.monto_transaccion), 0) AS MONTO -- asumiento el promedio del monto total por compra
+        --TRUNC(AVG(ttc.monto_total_transaccion), 0) AS MONTO --asumiento el promedio del monto total (+interes) por compra
     FROM 
         transaccion_tarjeta_cliente ttc
-    JOIN 
-        tipo_transaccion_tarjeta ttt ON ttc.cod_tptran_tarjeta = ttt.cod_tptran_tarjeta
+    INNER JOIN 
+        tipo_transaccion_tarjeta ttt 
+        ON ttc.cod_tptran_tarjeta = ttt.cod_tptran_tarjeta
+    INNER JOIN
+        cuota_transac_tarjeta_cliente cttc 
+        ON ttc.nro_tarjeta = cttc.nro_tarjeta AND ttc.nro_transaccion = cttc.nro_transaccion
     WHERE 
-        EXTRACT(MONTH FROM ADD_MONTHS(ttc.fecha_transaccion, ttc.total_cuotas_transaccion)) BETWEEN 6 AND 12
+        EXTRACT(MONTH FROM cttc.fecha_venc_cuota) BETWEEN 6 AND 12
+    GROUP BY 
+        ttc.cod_tptran_tarjeta, ttt.nombre_tptran_tarjeta
 )
 SELECT 
     FECHA,
-    COD_TIPO_TRANSAC,
-    NOMBRE_TIPO_TRANSAC,
-    ROUND(AVG(MONTO)) AS MONTO_PROMEDIO
+    CODIGO AS COD_TIPO_TRANSAC,
+    DESCRIPCION AS NOMBRE_TIPO_TRANSAC,
+    MONTO AS MONTO_PROMEDIO
 FROM 
     TransaccionesFiltradas
-GROUP BY 
-    FECHA, COD_TIPO_TRANSAC, NOMBRE_TIPO_TRANSAC
 ORDER BY 
     MONTO_PROMEDIO ASC;
     
@@ -1850,6 +1866,7 @@ ORDER BY
 SELECT * FROM SELECCION_TIPO_TRANSACCION;
 
 
+----------------------------
 
 -- Actualización de la tasa de interés basada en SELECCIÓN_TIPO_TRANSACCIÓN
 UPDATE tipo_transaccion_tarjeta ttt
@@ -1866,7 +1883,7 @@ SELECT * FROM TIPO_TRANSACCION_TARJETA;
 
 
 
-
+-------------------------------------
 
 -- Preguntas del Informe 2
 /*
