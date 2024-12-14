@@ -1758,7 +1758,10 @@ COMMIT;
 -- Jaime Barraza - EFT Consulta Base de Datos 2024
 ---------------------------------------------------------
 
--- Informe 1
+----------------------------------------------------------------------
+-- Informe 1 
+----------------------------------------------------------------------
+
 -- Crear la vista Resumen_Clientes_Region
 CREATE OR REPLACE VIEW Resumen_Clientes_Region AS
 SELECT 
@@ -1796,10 +1799,13 @@ SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
 
 ----------------------------------------------------------------------
--- Informe 2: Transacciones con vencimientos en el segundo semestre --
+-- Informe 2
 ----------------------------------------------------------------------
 
--- Alternativa 1: Usando OPERADOR SET
+----------------------------------------
+-- Alternativa 1: Usando OPERADOR SET --
+----------------------------------------
+
 CREATE OR REPLACE VIEW Transacciones_Segundo_Semestre AS
 SELECT 
     TO_CHAR(SYSDATE, 'DD-MM-YYYY') AS FECHA, -- fecha emision informe
@@ -1817,7 +1823,7 @@ INNER JOIN
     cuota_transac_tarjeta_cliente cttc 
     ON ttc.nro_tarjeta = cttc.nro_tarjeta AND ttc.nro_transaccion = cttc.nro_transaccion
 WHERE 
-    EXTRACT(MONTH FROM cttc.fecha_venc_cuota) BETWEEN 6 AND 12
+    EXTRACT(MONTH FROM cttc.fecha_venc_cuota) BETWEEN 6 AND 12 -- meses de julio a diciembre
 GROUP BY 
     ttc.cod_tptran_tarjeta, ttt.nombre_tptran_tarjeta
 ORDER BY 
@@ -1826,10 +1832,12 @@ ORDER BY
 -----
 SELECT * FROM Transacciones_Segundo_Semestre;
 
----------------------------
 
 
--- Alternativa 2: Usando SUBCONSULTA y almacenando resultados en SELECCIÓN_TIPO_TRANSACCIÓN
+----------------------------------------------------------------------------------------------
+-- Alternativa 2: Usando SUBCONSULTA y almacenando resultados en SELECCIÓN_TIPO_TRANSACCIÓN --
+----------------------------------------------------------------------------------------------
+
 INSERT INTO seleccion_tipo_transaccion (fecha, cod_tipo_transac, nombre_tipo_transac, monto_promedio)
 WITH TransaccionesFiltradas AS (
     SELECT 
@@ -1865,10 +1873,12 @@ ORDER BY
     
 SELECT * FROM SELECCION_TIPO_TRANSACCION;
 
+COMMIT;
 
-----------------------------
+----------------------------------------------------------------------------------
+---- Actualización de la tasa de interés basada en SELECCIÓN_TIPO_TRANSACCIÓN ----
+----------------------------------------------------------------------------------
 
--- Actualización de la tasa de interés basada en SELECCIÓN_TIPO_TRANSACCIÓN
 UPDATE tipo_transaccion_tarjeta ttt
 SET ttt.tasaint_tptran_tarjeta = TRUNC(ttt.tasaint_tptran_tarjeta * 0.99, 2)
 WHERE EXISTS (
@@ -1880,10 +1890,11 @@ WHERE EXISTS (
 
 SELECT * FROM TIPO_TRANSACCION_TARJETA;
 
+COMMIT;
 
 
 
--------------------------------------
+----------------------------------------------------------------------------------------------
 
 -- Preguntas del Informe 2
 /*
